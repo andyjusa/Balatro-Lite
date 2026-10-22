@@ -1,0 +1,26 @@
+name: Patch regressions
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lua:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y lua5.1
+      - name: Check Lua syntax and regressions without game assets
+        run: |
+          for patch in balatro/patches/*.lua tests/*.lua; do
+            luac5.1 -p "$patch"
+          done
+          lua5.1 tests/small_screen_packs.lua
+          lua5.1 tests/handheld_compatibility.lua

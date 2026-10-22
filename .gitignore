@@ -9,3 +9,7 @@ android/build/
 .upstream-love-android/
 *.jks
 *.keystore
+*.jkr
+*.love
+*.apk
+*.exe

@@ -41,3 +41,38 @@ function Controller:button_press_update(button, dt)
     end
     return original_button_press_update(self, button, dt)
 end
+
+-- A loaded, active blind can pay $0 (for example a Small Blind at Red Stake
+-- or above). The game's reward animation only reveals paying blinds, leaving
+-- this one's name and icon above the screen after Continue.
+local original_blind_load = Blind.load
+function Blind:load(...)
+    local result = original_blind_load(self, ...)
+    if self.blind_set and self.name ~= '' and G.HUD_blind then
+        G.HUD_blind.alignment.offset.y = 0
+    end
+    return result
+end
+
+-- GammaOS on RG Rotate exposes this pad's D-pad as buttons, without a hat.
+-- The purchased game's older controller database replaces SDL's working map
+-- with hat bindings during startup. Repair only these four inputs after that
+-- import; leave face-button setup and every other device's mapping intact.
+local original_start_up = Game.start_up
+function Game:start_up(...)
+    local result = original_start_up(self, ...)
+    if love.system.getOS() == 'Android' then
+        for _, joystick in ipairs(love.joystick.getJoysticks()) do
+            local guid = joystick:getGUID()
+            if guid == '05007ad15e040000130b0000ffff3f00' and
+               joystick:getHatCount() == 0 then
+                -- LÖVE uses one-based button indices (SDL b11 through b14).
+                love.joystick.setGamepadMapping(guid, 'dpup', 'button', 12)
+                love.joystick.setGamepadMapping(guid, 'dpdown', 'button', 13)
+                love.joystick.setGamepadMapping(guid, 'dpleft', 'button', 14)
+                love.joystick.setGamepadMapping(guid, 'dpright', 'button', 15)
+            end
+        end
+    end
+    return result
+end

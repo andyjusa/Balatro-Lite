@@ -45,7 +45,7 @@ public final class ImportActivity extends Activity {
     private static final String PREF_EXTERNAL_SAVES_MIGRATED = "external_saves_migrated";
     // Increment whenever patch behavior changes without relying on the APK's
     // versionCode. Local debug builds intentionally keep versionCode 1.
-    private static final int PATCH_SCHEMA_VERSION = 3;
+    private static final int PATCH_SCHEMA_VERSION = 4;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private TextView status;

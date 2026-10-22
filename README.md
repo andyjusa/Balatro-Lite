@@ -10,6 +10,12 @@ This repository also builds **Balatro Lite for Android**. The Android app uses t
 
 This port builds on nkahoang's original PortMaster work—thank you.
 
+## RG Rotate maintenance fork
+
+This [fork](https://github.com/andyjusa/Balatro-Lite) maintains focused Android fixes for the **Anbernic RG Rotate**, including its 720 × 720 display and GammaOS controller mapping. [Guandor/Balatro-Lite](https://github.com/Guandor/Balatro-Lite) remains the upstream project; upstream releases do not include this fork's changes unless they have been accepted there.
+
+The maintenance scope and update checks are documented in [RG Rotate maintenance](docs/RG_ROTATE.md). The game files and saves must still come from your own copy of Balatro.
+
 ## What's different
 
 - **Fills the screen.** The playfield takes your device's own aspect ratio and uses the whole panel, so everything is drawn noticeably larger.
@@ -40,7 +46,7 @@ In short, it's uglier, but it runs better and fits small screens better.
 <!-- PORTMASTER_REPACK_REMOVE_START -->
 ### Android
 
-1. Download and install `balatrolite-vX.Y.Z.apk` from the [Releases page](https://github.com/Guandor/Balatro-Lite/releases).
+1. Download and install `balatrolite-vX.Y.Z.apk` from the [upstream Releases page](https://github.com/Guandor/Balatro-Lite/releases). For this fork's changes, use a build from this fork; the upstream APK does not automatically include them.
 2. Launch **Balatro Lite** and choose `Balatro.exe` from a copy you own. `Balatro.love` from the macOS build is accepted too.
 3. Choose the port settings. To bring over your Steam save, put `meta.jkr`, `profile.jkr`, and `save.jkr` in a ZIP and choose **Import Save (.zip)**. This replaces profile 1.
 4. Wait while the file is verified and patched on your device. Later launches start the game directly; APK updates rebuild the patch from the private imported original.

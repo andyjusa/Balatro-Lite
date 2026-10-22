@@ -1207,7 +1207,7 @@ function Game:start_run(...)
     return result
 end
 
--- The cash-out screen, the booster packs and the deck preview are all centred on
+-- The cash-out screen and the deck preview are centred on
 -- the hand by the stock game, which is the same thing as the screen centre on a
 -- desktop layout. Here it is not: the hand shares its row with the deck, so it
 -- sits left of centre to clear it, and everything anchored to it inherited that
@@ -1224,8 +1224,12 @@ end
 
 local function pin_run_overlay(box, y, x)
     if not box then return end
+    -- Consumable animations save their return position in offset.py. Keep the
+    -- same offset table when changing anchors so those callbacks can restore it.
+    local offset = box.alignment.offset
+    offset.x, offset.y = x or 0, y
     box:set_alignment({major=G.ROOM_ATTACH, type='tmi',
-        offset={x=x or 0, y=y}, bond='Strong'})
+        offset=offset, bond='Strong'})
     -- Source transitions rewrite the offset after constructing these boxes. Force
     -- a fresh alignment so the desktop animation cannot pull them under Jokers.
     box.alignment.prev_type = nil
@@ -1265,13 +1269,64 @@ local function shop_pin()
     return shop_pin_x, shop_pin_y
 end
 
+-- UIBox children and shop cards have separate draw/focus paths. Hiding only the
+-- panel, or moving its transform, can leave cards, prices and tooltips behind.
+local hidden_shop_nodes = {}
+local shop_input_states = {'collide', 'hover', 'click', 'drag'}
+local function hide_pack_shop()
+    local seen = {}
+    local function hide(node)
+        if not node or seen[node] then return end
+        seen[node] = true
+        if node.states then
+            local saved = hidden_shop_nodes[node]
+            if not saved then
+                saved = {visible=node.states.visible}
+                for _, state in ipairs(shop_input_states) do
+                    if node.states[state] then saved[state] = node.states[state].can end
+                end
+                hidden_shop_nodes[node] = saved
+            end
+            node.states.visible = false
+            for _, state in ipairs(shop_input_states) do
+                if node.states[state] then node.states[state].can = false end
+            end
+        end
+        for _, child in pairs(node.children or {}) do hide(child) end
+        for _, card in ipairs(node.cards or {}) do hide(card) end
+        hide(node.UIRoot)
+        if node.config then hide(node.config.object) end
+    end
+    hide(G.shop)
+    hide(G.SHOP_SIGN)
+    hide(G.shop_jokers)
+    hide(G.shop_vouchers)
+    hide(G.shop_booster)
+end
+
+local function restore_pack_shop()
+    if next(hidden_shop_nodes) then
+        -- Static UI children can keep their old VT under ROOM_ATTACH's
+        -- stationary parent. Rebuild them after the normal shop pin returns.
+        shop_needs_relayout = true
+    end
+    for node, saved in pairs(hidden_shop_nodes) do
+        node.states.visible = saved.visible
+        for _, state in ipairs(shop_input_states) do
+            if node.states[state] then node.states[state].can = saved[state] end
+        end
+    end
+    hidden_shop_nodes = {}
+end
+
 -- The shop transition normally targets a negative offset relative to the hand.
 -- Re-pin the panel on every shop frame, since a queued desktop entrance event
 -- also rewrites its offset shortly after construction.
 local original_update_shop = Game.update_shop
 function Game:update_shop(dt)
+    restore_pack_shop()
     local result = original_update_shop(self, dt)
-    if G.shop then
+    if G.shop and not G.shop.alignment.offset.py then
         local x, y = shop_pin()
         pin_run_overlay(G.shop, y, x)
         -- Only now, with the panel at the position it will keep, is it worth
@@ -1290,11 +1345,7 @@ function Game:update_shop(dt)
     return result
 end
 
--- Blind selection gets the same explicit lower content zone. Owned Jokers and
--- consumables remain visible for decision-making, but can no longer cover a blind.
--- Cash out, the five booster pack types, and the deck preview. Each keeps the
--- vertical placement and the slide-in the stock game gives it; only the
--- horizontal centring is corrected.
+-- Cash out and the deck preview only need horizontal centring.
 local original_update_round_eval = Game.update_round_eval
 function Game:update_round_eval(dt)
     local result = original_update_round_eval(self, dt)
@@ -1302,12 +1353,59 @@ function Game:update_round_eval(dt)
     return result
 end
 
+-- The stock title's dynamic background reserves 30 tiles so it can continue
+-- below a desktop window. On a borderless handheld that filler both covers the
+-- table and makes a bottom clamp measure 34 tiles instead of the pack contents.
+-- Remove this sentinel only in pack definitions, before UIBox measures them.
+local function compact_pack_background(node)
+    if node.config and node.config.minh == 30 then node.config.minh = nil end
+    for _, child in ipairs(node.nodes or {}) do compact_pack_background(child) end
+end
+
+for _, pack in ipairs({'arcana', 'spectral', 'standard', 'buffoon', 'celestial'}) do
+    local name = 'create_UIBox_'..pack..'_pack'
+    local original = _G[name]
+    _G[name] = function(...)
+        local definition = original(...)
+        compact_pack_background(definition)
+        return definition
+    end
+end
+
+-- Keep the stock gap below the hand raised for Tarot/Spectral/Planet selection,
+-- moving the pack upward only as far as its measured bottom needs. A fixed top
+-- would cover that hand on 4:3 screens; the stock hand anchor clips the pack's
+-- choices and Skip button on square screens.
+local function fit_booster_pack()
+    local box = G.booster_pack
+    if not box or not G.hand then return end
+    local offset = box.alignment.offset
+    -- use_card temporarily sends the box to 29, and end_consumeable exits at 9.
+    -- Only re-pin a resting box, including the source's initial -2.2 offset.
+    if offset.py or (offset.y ~= -2.2 and
+       offset.y ~= box.small_screen_pack_y) then return end
+    local y = math.min(-2.2, ROOM_H - SAFE_MARGIN - box.T.h - G.hand.T.y)
+    box.small_screen_pack_y = y
+    offset.y = y
+    -- Retain the hand anchor: the source's 9/29 exit offsets must still land
+    -- below the hand, rather than becoming visible absolute room coordinates.
+    centre_on_room(box)
+    box:align_to_major()
+end
+
 for _, pack in ipairs({'arcana', 'spectral', 'standard', 'buffoon', 'celestial'}) do
     local name = 'update_'..pack..'_pack'
     local original = Game[name]
     Game[name] = function(self, dt)
         local result = original(self, dt)
-        centre_on_room(G.booster_pack)
+        fit_booster_pack()
+        if G.shop then
+            -- Stock uses 11 relative to the hand. The compact shop is attached
+            -- to the room, so 11 still exposes its bottom on a square panel.
+            local x = shop_pin()
+            pin_run_overlay(G.shop, ROOM_H + SAFE_MARGIN, x)
+        end
+        hide_pack_shop()
         return result
     end
 end
